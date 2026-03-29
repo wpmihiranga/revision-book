@@ -60,5 +60,15 @@ export const SAMPLE_NOTES: Note[] = [
     updatedAt: Date.now() - 86400000 * 20,
     voiceNotes: [],
     images: []
+  },
+  {
+    id: '7',
+    title: 'Champaka and Pramod',
+    subject: 'It Boys',
+    content: 'Double-entry bookkeeping is a system of recording transactions where every entry to an account requires a corresponding and opposite entry to a different account. \n\nAssets = Liabilities + Equity\n\nDebits (DR) increase assets and expenses.\nCredits (CR) increase liabilities, equity, and revenue.',
+    createdAt: Date.now() - 86400000 * 20,
+    updatedAt: Date.now() - 86400000 * 20,
+    voiceNotes: [],
+    images: []
   }
 ];
