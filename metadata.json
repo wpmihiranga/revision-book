@@ -1,0 +1,5 @@
+{
+  "name": "RevisionBook",
+  "description": "A simple, fast digital revision book for O'Level and A'Level students with voice notes.",
+  "requestFramePermissions": ["microphone"]
+}
