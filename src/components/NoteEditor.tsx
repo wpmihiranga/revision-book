@@ -7,6 +7,7 @@ import { ConfirmationModal } from './ConfirmationModal';
 
 interface NoteEditorProps {
   note: Note | null;
+  userId: string;
   initialSubject?: string;
   existingSubjects?: string[];
   onSave: (note: Note) => void;
@@ -16,7 +17,7 @@ interface NoteEditorProps {
   onToggleTheme: () => void;
 }
 
-export function NoteEditor({ note, initialSubject, existingSubjects = [], onSave, onDelete, onBack, theme, onToggleTheme }: NoteEditorProps) {
+export function NoteEditor({ note, userId, initialSubject, existingSubjects = [], onSave, onDelete, onBack, theme, onToggleTheme }: NoteEditorProps) {
   const [title, setTitle] = useState(note?.title || '');
   const [subject, setSubject] = useState(note?.subject || initialSubject || '');
   const [content, setContent] = useState(note?.content || '');
@@ -31,6 +32,13 @@ export function NoteEditor({ note, initialSubject, existingSubjects = [], onSave
     s.toLowerCase().includes(subject.toLowerCase()) && s.toLowerCase() !== subject.toLowerCase()
   );
 
+  const generateId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return Date.now().toString(36) + Math.random().toString(36).substring(2);
+  };
+
   const handleSave = () => {
     if (!title.trim()) {
       setError('Please enter a title for your note');
@@ -38,7 +46,8 @@ export function NoteEditor({ note, initialSubject, existingSubjects = [], onSave
     }
     
     const newNote: Note = {
-      id: note?.id || Date.now().toString(),
+      id: note?.id || generateId(),
+      userId: note?.userId || userId,
       title,
       subject: subject || 'General',
       content,
@@ -72,7 +81,7 @@ export function NoteEditor({ note, initialSubject, existingSubjects = [], onSave
 
   const addVoiceNote = (audioData: string, duration: number) => {
     const newVoiceNote: VoiceNote = {
-      id: Date.now().toString(),
+      id: generateId(),
       noteId: note?.id || 'temp',
       audioData,
       duration,

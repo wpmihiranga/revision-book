@@ -1,27 +1,36 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Book, Moon, Sun, ChevronRight, Edit3, Trash2 } from 'lucide-react';
+import { Plus, Search, Book, Moon, Sun, ChevronRight, Edit3, Trash2, User as UserIcon, LogOut, Shield } from 'lucide-react';
 import { useNotes } from './hooks/useNotes';
+import { useAuth } from './hooks/useAuth';
 import { Note, AppScreen, Theme } from './types';
 import { NoteEditor } from './components/NoteEditor';
 import { NoteReader, SwipeableImageViewer } from './components/NoteReader';
 import { SubjectDetail } from './components/SubjectDetail';
 import { TrashView } from './components/TrashView';
+import { AuthModal } from './components/AuthModal';
+import { AdminDashboard } from './components/AdminDashboard';
+import { ConfirmationModal } from './components/ConfirmationModal';
 import { cn, highlightText } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
+  const { user, loading: authLoading, signIn, signUp, signOut, deleteAccount, getAllUsers, deleteUserByAdmin } = useAuth();
   const { 
     notes, 
     deletedNotes,
-    loading, 
+    allNotes,
+    loading: notesLoading, 
     addNote, 
     updateNote, 
     deleteNote, 
     moveToTrash,
     restoreNote,
     permanentDeleteNote,
-    renameSubject 
-  } = useNotes();
+    renameSubject,
+    migrateNotes,
+    deleteUserNotes,
+    ensureGuestNotes
+  } = useNotes(user);
   
   // Navigation State
   const [navStack, setNavStack] = useState<NavState[]>([{ screen: 'home' }]);
@@ -30,6 +39,9 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isRenaming, setIsRenaming] = useState<string | null>(null);
   const [newSubjectName, setNewSubjectName] = useState('');
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem('revisionbook-theme');
     return (saved as Theme) || 'light';
@@ -69,8 +81,32 @@ export default function App() {
     localStorage.setItem('revisionbook-theme', theme);
   }, [theme]);
 
+  const handleSignOut = async () => {
+    await signOut();
+    await ensureGuestNotes();
+    setNavStack([{ screen: 'home' }]);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user || user.isGuest) return;
+    const userId = user.id;
+    await deleteUserNotes(userId);
+    await deleteAccount(userId);
+    await ensureGuestNotes();
+    setNavStack([{ screen: 'home' }]);
+  };
+
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
+  const handleSignIn = async (email: string) => {
+    await signIn(email);
+  };
+
+  const handleSignUp = async (email: string, displayName: string) => {
+    const newUser = await signUp(email, displayName);
+    await migrateNotes(newUser.id);
   };
 
   const subjects = useMemo(() => {
@@ -96,11 +132,17 @@ export default function App() {
   };
 
   const handleEditNote = (note: Note) => {
-    pushNav({ screen: 'edit', selectedNote: note });
+    // Resolve the latest version of the note from state by ID
+    const latestNote = notes.find(n => n.id === note.id);
+    if (!latestNote) return; // Fail gracefully
+    pushNav({ screen: 'edit', selectedNote: latestNote });
   };
 
   const handleOpenReader = (note: Note) => {
-    pushNav({ screen: 'reader', selectedNote: note });
+    // Resolve the latest version of the note from state by ID
+    const latestNote = notes.find(n => n.id === note.id);
+    if (!latestNote) return; // Fail gracefully
+    pushNav({ screen: 'reader', selectedNote: latestNote });
   };
 
   const handleOpenImageViewer = (index: number) => {
@@ -118,12 +160,77 @@ export default function App() {
     } else {
       addNote(note);
     }
+    
+    // Ensure the navigation state is updated if we are returning to a reader
+    setNavStack(prev => {
+      const newStack = [...prev];
+      if (newStack.length >= 2) {
+        const prevEntry = newStack[newStack.length - 2];
+        if (prevEntry.screen === 'reader' && prevEntry.selectedNote?.id === note.id) {
+          newStack[newStack.length - 2] = { ...prevEntry, selectedNote: note };
+        }
+      }
+      return newStack;
+    });
+
     handleBack();
   };
 
   const handleDeleteNote = (id: string) => {
+    if (!id) return;
+    
+    // Find the note before deleting to know its subject
+    const noteToDelete = notes.find(n => n.id === id);
+    if (!noteToDelete) {
+      handleBack();
+      return;
+    }
+    
+    const subjectName = noteToDelete.subject;
     deleteNote(id);
-    handleBack();
+    
+    // Calculate remaining notes in this subject for the current user
+    // We filter from the current 'notes' array and exclude the one being deleted
+    const remainingInSubject = notes.filter(n => n.subject === subjectName && n.id !== id);
+    
+    if (remainingInSubject.length > 0) {
+      // If notes remain, we want to return to the subject detail page.
+      // We look for the subjectDetail screen in our current navigation stack.
+      const subjectDetailIndex = navStack.findIndex(s => s.screen === 'subjectDetail' && s.selectedSubject === subjectName);
+      
+      if (subjectDetailIndex !== -1) {
+        // If it exists in history, go back exactly the number of steps needed to reach it.
+        // This keeps the browser history clean and avoids duplicate entries.
+        const steps = (navStack.length - 1) - subjectDetailIndex;
+        if (steps > 0) {
+          window.history.go(-steps);
+        }
+      } else {
+        // If we came from search or another path where subjectDetail wasn't in the stack,
+        // we replace the current state with the subject detail view.
+        const newStack: NavState[] = [
+          { screen: 'home' as AppScreen },
+          { screen: 'subjectDetail' as AppScreen, selectedSubject: subjectName }
+        ];
+        setNavStack(newStack);
+        window.history.replaceState({ stack: newStack }, '');
+      }
+    } else {
+      // If no notes remain in this subject, we return to the home screen.
+      const homeIndex = navStack.findIndex(s => s.screen === 'home');
+      if (homeIndex !== -1) {
+        // Go back to the existing home entry in history.
+        const steps = (navStack.length - 1) - homeIndex;
+        if (steps > 0) {
+          window.history.go(-steps);
+        }
+      } else {
+        // Fallback: replace current state with home.
+        const newStack: NavState[] = [{ screen: 'home' as AppScreen }];
+        setNavStack(newStack);
+        window.history.replaceState({ stack: newStack }, '');
+      }
+    }
   };
 
   const handleSubjectClick = (subject: string) => {
@@ -140,7 +247,7 @@ export default function App() {
     setNewSubjectName('');
   };
 
-  if (loading) {
+  if (authLoading || notesLoading) {
     return (
       <div className="h-screen bg-[var(--bg-app)] flex items-center justify-center">
         <div className="text-center">
@@ -153,8 +260,35 @@ export default function App() {
 
   const showSearch = currentNav.screen === 'home';
 
+  const handleDeleteUserByAdmin = async (userId: string) => {
+    // 1. Delete all notes for this user
+    await deleteUserNotes(userId);
+    // 2. Delete the user record
+    await deleteUserByAdmin(userId);
+  };
+
   return (
     <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)] font-sans selection:bg-amber-200 transition-colors duration-300">
+      <AnimatePresence mode="wait">
+        {currentNav.screen === 'admin' && user?.isAdmin && (
+          <motion.div
+            key="admin"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="fixed inset-0 z-50"
+          >
+            <AdminDashboard 
+              onBack={handleBack}
+              getAllUsers={getAllUsers}
+              deleteUser={handleDeleteUserByAdmin}
+              allNotes={allNotes}
+              theme={theme}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Global Header with Search (Only on Home) */}
       {showSearch && (
         <header className="sticky top-0 z-50 bg-[var(--bg-card)]/80 backdrop-blur-md px-6 py-4 border-b border-[var(--border-color)]">
@@ -163,13 +297,77 @@ export default function App() {
               <h1 className="text-xl font-black text-amber-900 dark:text-amber-500 tracking-tight">RevisionBook</h1>
               <p className="text-[8px] font-bold text-amber-600 uppercase tracking-widest">O/A Level Study Hub</p>
             </div>
-            <button 
-              onClick={toggleTheme}
-              className="p-2 bg-[var(--bg-app)] text-amber-700 dark:text-amber-500 rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors shadow-sm"
-              aria-label="Toggle Theme"
-            >
-              {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={toggleTheme}
+                className="p-2 bg-[var(--bg-app)] text-amber-700 dark:text-amber-500 rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors shadow-sm"
+                aria-label="Toggle Theme"
+              >
+                {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+              </button>
+              {user?.isGuest ? (
+                <button 
+                  onClick={() => setShowAuthModal(true)}
+                  className="p-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors shadow-sm flex items-center gap-2 px-3"
+                >
+                  <UserIcon size={18} />
+                  <span className="text-xs font-bold uppercase tracking-wider">Sign In</span>
+                </button>
+              ) : (
+                <div className="relative">
+                  <button 
+                    onClick={() => setIsAccountMenuOpen(!isAccountMenuOpen)}
+                    className="flex items-center gap-2 px-3 py-2 bg-[var(--bg-app)] rounded-xl border border-[var(--border-color)] hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors shadow-sm"
+                  >
+                    <UserIcon size={16} className="text-amber-600" />
+                    <span className="text-xs font-bold uppercase tracking-wider truncate max-w-[100px]">{user?.displayName}</span>
+                  </button>
+                  
+                  {isAccountMenuOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-[60]" 
+                        onClick={() => setIsAccountMenuOpen(false)}
+                      />
+                      <div className="absolute right-0 mt-2 w-48 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-xl z-[70] overflow-hidden py-1 animate-in fade-in zoom-in duration-200 origin-top-right">
+                        {user?.isAdmin && (
+                          <button 
+                            onClick={() => {
+                              setIsAccountMenuOpen(false);
+                              pushNav({ screen: 'admin' });
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors border-b border-[var(--border-color)]"
+                          >
+                            <Shield size={16} />
+                            <span>Admin Dashboard</span>
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => {
+                            setIsAccountMenuOpen(false);
+                            handleSignOut();
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+                        >
+                          <LogOut size={16} />
+                          <span>Log Out</span>
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setIsAccountMenuOpen(false);
+                            setShowDeleteConfirm(true);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border-t border-[var(--border-color)]"
+                        >
+                          <Trash2 size={16} />
+                          <span>Delete Account</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="flex items-center gap-2">
@@ -379,6 +577,7 @@ export default function App() {
           >
             <NoteEditor 
               note={currentNav.selectedNote || null} 
+              userId={user?.id || 'guest'}
               initialSubject={currentNav.selectedSubject || undefined}
               existingSubjects={subjects.map(s => s.name)}
               onSave={handleSaveNote} 
@@ -399,15 +598,25 @@ export default function App() {
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             className="fixed inset-0 z-20"
           >
-            <NoteReader 
-              note={currentNav.selectedNote} 
-              onBack={handleBack}
-              onEdit={() => handleEditNote(currentNav.selectedNote!)}
-              onDelete={handleDeleteNote}
-              onOpenImageViewer={handleOpenImageViewer}
-              theme={theme}
-              onToggleTheme={toggleTheme}
-            />
+            {(() => {
+              const freshNote = notes.find(n => n.id === currentNav.selectedNote?.id);
+              if (!freshNote && currentNav.selectedNote) {
+                // If the note is not in active notes, it might be deleted
+                // We should probably not show the reader if it's gone
+                return null;
+              }
+              return (
+                <NoteReader 
+                  note={freshNote || currentNav.selectedNote!} 
+                  onBack={handleBack}
+                  onEdit={() => handleEditNote(currentNav.selectedNote!)}
+                  onDelete={handleDeleteNote}
+                  onOpenImageViewer={handleOpenImageViewer}
+                  theme={theme}
+                  onToggleTheme={toggleTheme}
+                />
+              );
+            })()}
           </motion.div>
         )}
 
@@ -440,13 +649,30 @@ export default function App() {
             className="fixed inset-0 z-[100]"
           >
             <SwipeableImageViewer 
-              images={currentNav.selectedNote.images}
+              images={(notes.find(n => n.id === currentNav.selectedNote?.id) || currentNav.selectedNote).images}
               initialIndex={currentNav.selectedImageIndex || 0}
               onClose={handleBack}
             />
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)} 
+        onSignIn={handleSignIn}
+        onSignUp={handleSignUp}
+      />
+
+      <ConfirmationModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDeleteAccount}
+        title="Delete Account"
+        message="Are you sure you want to delete your account? This will permanently remove all your notes. This action cannot be undone."
+        confirmText="Delete Everything"
+        type="danger"
+      />
     </div>
   );
 }

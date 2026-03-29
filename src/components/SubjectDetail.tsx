@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, BookOpen, Plus, Search, X, LayoutGrid, List, Mic } from 'lucide-react';
 import { Note, Theme } from '../types';
 import { formatDate, highlightText } from '../lib/utils';

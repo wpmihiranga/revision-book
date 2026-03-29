@@ -17,6 +17,7 @@ interface NoteReaderProps {
 }
 
 export function NoteReader({ note, onBack, onEdit, onDelete, onOpenImageViewer, theme, onToggleTheme }: NoteReaderProps) {
+  if (!note) return null;
   const [currentPage, setCurrentPage] = useState(0);
   const [pages, setPages] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -24,6 +25,7 @@ export function NoteReader({ note, onBack, onEdit, onDelete, onOpenImageViewer, 
   const [selectedVoiceNote, setSelectedVoiceNote] = useState<VoiceNote | null>(null);
 
   useEffect(() => {
+    if (!note) return;
     const sections = note.content.split('\n\n');
     const groupedPages: string[] = [];
     let currentGroup = '';

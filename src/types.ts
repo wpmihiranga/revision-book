@@ -7,8 +7,17 @@ export interface VoiceNote {
   createdAt: number;
 }
 
+export interface User {
+  id: string;
+  email: string;
+  displayName?: string;
+  isGuest: boolean;
+  isAdmin?: boolean;
+}
+
 export interface Note {
   id: string;
+  userId: string;
   title: string;
   subject: string;
   content: string;
@@ -22,6 +31,6 @@ export interface Note {
 
 export type SortOption = 'newest' | 'oldest' | 'subject';
 
-export type AppScreen = 'home' | 'edit' | 'reader' | 'search' | 'subjectDetail' | 'imageViewer' | 'trash';
+export type AppScreen = 'home' | 'edit' | 'reader' | 'search' | 'subjectDetail' | 'imageViewer' | 'trash' | 'admin';
 
 export type Theme = 'light' | 'dark';
