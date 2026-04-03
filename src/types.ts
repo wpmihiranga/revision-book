@@ -27,9 +27,11 @@ export interface Note {
   images: string[]; // Base64 strings
   isDeleted?: boolean;
   deletedAt?: number;
+  pinned?: boolean;
 }
 
 export type SortOption = 'newest' | 'oldest' | 'subject';
+export type SubjectSortOption = 'newest' | 'oldest' | 'az' | 'za';
 
 export type AppScreen = 'home' | 'edit' | 'reader' | 'search' | 'subjectDetail' | 'imageViewer' | 'trash' | 'admin';
 

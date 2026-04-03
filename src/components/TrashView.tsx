@@ -11,12 +11,14 @@ interface TrashViewProps {
   onBack: () => void;
   onRestore: (id: string) => void;
   onPermanentDelete: (id: string) => void;
+  onClearTrash: () => void;
   theme: Theme;
   onToggleTheme: () => void;
 }
 
-export function TrashView({ notes, onBack, onRestore, onPermanentDelete, theme, onToggleTheme }: TrashViewProps) {
+export function TrashView({ notes, onBack, onRestore, onPermanentDelete, onClearTrash, theme, onToggleTheme }: TrashViewProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   return (
     <div className="fixed inset-0 bg-[var(--bg-app)] flex flex-col z-50">
@@ -29,13 +31,23 @@ export function TrashView({ notes, onBack, onRestore, onPermanentDelete, theme, 
           <h1 className="text-xl font-black text-amber-900 dark:text-amber-100 tracking-tight">Trash</h1>
           <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">{notes.length} Deleted Notes</p>
         </div>
-        <button 
-          onClick={onToggleTheme}
-          className="p-2 text-amber-700 dark:text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-xl transition-colors"
-          aria-label="Toggle Theme"
-        >
-          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-        </button>
+        <div className="flex items-center gap-2">
+          {notes.length > 0 && (
+            <button 
+              onClick={() => setShowClearConfirm(true)}
+              className="px-3 py-2 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors"
+            >
+              Empty Trash
+            </button>
+          )}
+          <button 
+            onClick={onToggleTheme}
+            className="p-2 text-amber-700 dark:text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-xl transition-colors"
+            aria-label="Toggle Theme"
+          >
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+        </div>
       </header>
 
       {/* Notes List */}
@@ -102,6 +114,19 @@ export function TrashView({ notes, onBack, onRestore, onPermanentDelete, theme, 
         title="Permanently Delete?"
         message="This action cannot be undone. The note will be gone forever."
         confirmText="Delete Forever"
+        type="danger"
+      />
+
+      <ConfirmationModal
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={() => {
+          onClearTrash();
+          setShowClearConfirm(false);
+        }}
+        title="Empty Trash?"
+        message="Delete all trashed notes permanently? This action cannot be undone."
+        confirmText="Empty Everything"
         type="danger"
       />
     </div>

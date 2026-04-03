@@ -177,8 +177,28 @@ export function useNotes(user: User | null) {
     });
   };
 
+  const clearTrash = () => {
+    if (!user) return;
+    setAllNotes(prev => {
+      const updated = prev.filter(n => !(n.userId === user.id && n.isDeleted));
+      return saveAndNormalize(updated);
+    });
+  };
+
   const deleteNote = (id: string) => {
     moveToTrash(id);
+  };
+
+  const togglePin = (id: string) => {
+    if (!user) return;
+    setAllNotes(prev => {
+      const updated = prev.map(n => 
+        (n.userId === user.id && n.id === id) 
+          ? { ...n, pinned: !n.pinned } 
+          : n
+      );
+      return saveAndNormalize(updated);
+    });
   };
 
   const renameSubject = (oldName: string, newName: string) => {
@@ -226,6 +246,8 @@ export function useNotes(user: User | null) {
     addNote, 
     updateNote, 
     deleteNote, 
+    togglePin,
+    clearTrash,
     moveToTrash, 
     restoreNote, 
     permanentDeleteNote, 

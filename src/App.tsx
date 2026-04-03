@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Book, Moon, Sun, ChevronRight, Edit3, Trash2, User as UserIcon, LogOut, Shield } from 'lucide-react';
+import { Plus, Search, Book, Moon, Sun, ChevronRight, Edit3, Trash2, User as UserIcon, LogOut, Shield, Check } from 'lucide-react';
 import { useNotes } from './hooks/useNotes';
 import { useAuth } from './hooks/useAuth';
 import { Note, AppScreen, Theme } from './types';
@@ -23,6 +23,8 @@ export default function App() {
     addNote, 
     updateNote, 
     deleteNote, 
+    togglePin,
+    clearTrash,
     moveToTrash,
     restoreNote,
     permanentDeleteNote,
@@ -488,7 +490,7 @@ export default function App() {
                       onClick={() => handleRenameSubject(subject.name)}
                       className="p-2 bg-amber-600 text-white rounded-full active:scale-90 transition-transform"
                     >
-                      <Plus className="rotate-0" size={18} />
+                      <Check size={18} />
                     </button>
                     <button 
                       onClick={() => setIsRenaming(null)}
@@ -501,9 +503,10 @@ export default function App() {
                   <motion.div
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full text-left bg-[var(--bg-card)] p-6 rounded-[2rem] shadow-sm border border-[var(--border-color)] flex items-center justify-between group transition-all"
+                    onClick={() => handleSubjectClick(subject.name)}
+                    className="w-full text-left bg-[var(--bg-card)] p-6 rounded-[2rem] shadow-sm border border-[var(--border-color)] flex items-center justify-between group transition-all cursor-pointer"
                   >
-                    <div className="flex-1 cursor-pointer" onClick={() => handleSubjectClick(subject.name)}>
+                    <div className="flex-1">
                       <h3 className="text-xl font-bold text-[var(--text-primary)] mb-1 group-hover:text-amber-600 transition-colors">
                         {subject.name}
                       </h3>
@@ -518,7 +521,7 @@ export default function App() {
                           setIsRenaming(subject.name);
                           setNewSubjectName(subject.name);
                         }}
-                        className="p-2 text-[var(--text-secondary)] hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="p-2 text-[var(--text-secondary)] hover:text-amber-600 transition-opacity"
                       >
                         <Edit3 size={18} />
                       </button>
@@ -559,6 +562,7 @@ export default function App() {
               onNoteClick={handleOpenReader}
               onCreateNote={() => handleCreateNote(currentNav.selectedSubject!)}
               onSearch={setSearchQuery}
+              onTogglePin={togglePin}
               searchQuery={searchQuery}
               theme={theme}
               onToggleTheme={toggleTheme}
@@ -634,6 +638,7 @@ export default function App() {
               onBack={handleBack}
               onRestore={restoreNote}
               onPermanentDelete={permanentDeleteNote}
+              onClearTrash={clearTrash}
               theme={theme}
               onToggleTheme={toggleTheme}
             />
